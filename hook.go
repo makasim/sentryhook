@@ -25,32 +25,23 @@ type Hook struct {
 	withScope WithScope
 }
 
-func New(levels []logrus.Level) *Hook {
+func New(levels []logrus.Level) Hook {
 	return NewWithScope(levels, defaultWithScope)
 }
 
-func NewWithScope(levels []logrus.Level, ws WithScope) *Hook {
-	return &Hook{
+func NewWithScope(levels []logrus.Level, ws WithScope) Hook {
+	return Hook{
 		levels:    levels,
 		hub:       sentry.CurrentHub(),
 		withScope: ws,
 	}
 }
 
-func (hook *Hook) Fire(entry *logrus.Entry) error {
-	capture := false
-	for _, l := range hook.levels {
-		if l == entry.Level {
-			capture = true
+func (hook Hook) Levels() []logrus.Level {
+	return hook.levels
+}
 
-			break
-		}
-	}
-
-	if !capture {
-		return nil
-	}
-
+func (hook Hook) Fire(entry *logrus.Entry) error {
 	hub := sentry.CurrentHub().Clone()
 	hub.WithScope(defaultWithScope(entry))
 
@@ -70,6 +61,7 @@ func defaultWithScope(entry *logrus.Entry) func(s *sentry.Scope) {
 		for k, v := range entry.Data {
 			if k == "user_id" {
 				if userID, ok := v.(string); ok {
+
 					s.SetUser(sentry.User{
 						ID: userID,
 					})
