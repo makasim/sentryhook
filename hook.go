@@ -1,12 +1,14 @@
 package sentryhook
 
 import (
+	"reflect"
+
 	"github.com/getsentry/sentry-go"
 	"github.com/sirupsen/logrus"
 )
 
 var (
-	severityMap = map[logrus.Level]sentry.Level{
+	levelMap = map[logrus.Level]sentry.Level{
 		logrus.TraceLevel: sentry.LevelDebug,
 		logrus.DebugLevel: sentry.LevelDebug,
 		logrus.InfoLevel:  sentry.LevelInfo,
@@ -17,23 +19,39 @@ var (
 	}
 )
 
-type WithScope func(entry *logrus.Entry) func(s *sentry.Scope)
+type Converter func(entry *logrus.Entry, hub *sentry.Hub) *sentry.Event
+
+type Option func(h *Hook)
 
 type Hook struct {
 	hub       *sentry.Hub
 	levels    []logrus.Level
-	withScope WithScope
+	converter Converter
 }
 
-func New(levels []logrus.Level) Hook {
-	return NewWithScope(levels, defaultWithScope)
-}
-
-func NewWithScope(levels []logrus.Level, ws WithScope) Hook {
-	return Hook{
+func New(levels []logrus.Level, options ...Option) Hook {
+	h := Hook{
 		levels:    levels,
 		hub:       sentry.CurrentHub(),
-		withScope: ws,
+		converter: DefaultConverter,
+	}
+
+	for _, option := range options {
+		option(&h)
+	}
+
+	return h
+}
+
+func WithConverter(c Converter) Option {
+	return func(h *Hook) {
+		h.converter = c
+	}
+}
+
+func WithHub(hub *sentry.Hub) Option {
+	return func(h *Hook) {
+		h.hub = hub
 	}
 }
 
@@ -42,35 +60,34 @@ func (hook Hook) Levels() []logrus.Level {
 }
 
 func (hook Hook) Fire(entry *logrus.Entry) error {
-	hub := sentry.CurrentHub().Clone()
-	hub.WithScope(defaultWithScope(entry))
-
-	if err, ok := entry.Data[logrus.ErrorKey].(error); ok {
-		hub.CaptureException(err)
-	} else {
-		hub.CaptureMessage(entry.Message)
-	}
+	hook.hub.CaptureEvent(
+		hook.converter(entry, hook.hub),
+	)
 
 	return nil
 }
 
-func defaultWithScope(entry *logrus.Entry) func(s *sentry.Scope) {
-	return func(s *sentry.Scope) {
-		s.SetLevel(severityMap[entry.Level])
+func DefaultConverter(entry *logrus.Entry, hub *sentry.Hub) *sentry.Event {
+	event := sentry.NewEvent()
+	event.Level = levelMap[entry.Level]
+	event.Message = entry.Message
 
-		for k, v := range entry.Data {
-			if k == "user_id" {
-				if userID, ok := v.(string); ok {
-
-					s.SetUser(sentry.User{
-						ID: userID,
-					})
-
-					continue
-				}
-			}
-
-			s.SetExtra(k, v)
-		}
+	for k, v := range entry.Data {
+		event.Extra[k] = v
 	}
+
+	if err, ok := entry.Data[logrus.ErrorKey].(error); ok {
+		exception := sentry.Exception{
+			Type:  reflect.TypeOf(err).String(),
+			Value: err.Error(),
+		}
+
+		if hub.Client().Options().AttachStacktrace {
+			exception.Stacktrace = sentry.ExtractStacktrace(err)
+		}
+
+		event.Exception = []sentry.Exception{exception}
+	}
+
+	return event
 }
