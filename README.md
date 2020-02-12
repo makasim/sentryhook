@@ -46,7 +46,10 @@ func main() {
         sentryhook.WithConverter(newConverter()),
     ))
     
-    logger.Fatal("the error would be sent to sentry")
+    logger.
+        WithField("corr_id", "aCorrId").
+        WithField("user_id", "aUserId").
+        Fatal("the error would be sent to sentry")
 }
 
 func newConverter() sentryhook.Converter {
