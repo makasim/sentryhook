@@ -19,13 +19,15 @@ var (
 	}
 )
 
-type Converter func(entry *logrus.Entry, hub *sentry.Hub) *sentry.Event
+type Converter func(entry *logrus.Entry, event *sentry.Event, hub *sentry.Hub)
 
 type Option func(h *Hook)
 
 type Hook struct {
 	hub       *sentry.Hub
 	levels    []logrus.Level
+	tags      map[string]string
+	extra     map[string]interface{}
 	converter Converter
 }
 
@@ -41,6 +43,18 @@ func New(levels []logrus.Level, options ...Option) Hook {
 	}
 
 	return h
+}
+
+func WithTags(tags map[string]string) Option {
+	return func(h *Hook) {
+		h.tags = tags
+	}
+}
+
+func WithExtra(extra map[string]interface{}) Option {
+	return func(h *Hook) {
+		h.extra = extra
+	}
 }
 
 func WithConverter(c Converter) Option {
@@ -60,15 +74,22 @@ func (hook Hook) Levels() []logrus.Level {
 }
 
 func (hook Hook) Fire(entry *logrus.Entry) error {
-	hook.hub.CaptureEvent(
-		hook.converter(entry, hook.hub),
-	)
+	event := sentry.NewEvent()
+	for k, v := range hook.extra {
+		event.Extra[k] = v
+	}
+	for k, v := range hook.tags {
+		event.Tags[k] = v
+	}
+
+	hook.converter(entry, event, hook.hub)
+
+	hook.hub.CaptureEvent(event)
 
 	return nil
 }
 
-func DefaultConverter(entry *logrus.Entry, hub *sentry.Hub) *sentry.Event {
-	event := sentry.NewEvent()
+func DefaultConverter(entry *logrus.Entry, event *sentry.Event, hub *sentry.Hub) {
 	event.Level = levelMap[entry.Level]
 	event.Message = entry.Message
 
@@ -88,6 +109,4 @@ func DefaultConverter(entry *logrus.Entry, hub *sentry.Hub) *sentry.Event {
 
 		event.Exception = []sentry.Exception{exception}
 	}
-
-	return event
 }
