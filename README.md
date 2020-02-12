@@ -41,7 +41,10 @@ func main() {
     }
     
     logger := logrus.New()
-    logger.AddHook(sentryhook.New([]logrus.Level{logrus.PanicLevel, logrus.FatalLevel, logrus.ErrorLevel}))
+    logger.AddHook(sentryhook.New(
+        []logrus.Level{logrus.PanicLevel, logrus.FatalLevel, logrus.ErrorLevel},
+        sentryhook.WithConverter(newConverter()),
+    ))
     
     logger.Fatal("the error would be sent to sentry")
 }
