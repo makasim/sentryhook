@@ -7,17 +7,15 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-var (
-	levelMap = map[logrus.Level]sentry.Level{
-		logrus.TraceLevel: sentry.LevelDebug,
-		logrus.DebugLevel: sentry.LevelDebug,
-		logrus.InfoLevel:  sentry.LevelInfo,
-		logrus.WarnLevel:  sentry.LevelWarning,
-		logrus.ErrorLevel: sentry.LevelError,
-		logrus.FatalLevel: sentry.LevelFatal,
-		logrus.PanicLevel: sentry.LevelFatal,
-	}
-)
+var levelMap = map[logrus.Level]sentry.Level{
+	logrus.TraceLevel: sentry.LevelDebug,
+	logrus.DebugLevel: sentry.LevelDebug,
+	logrus.InfoLevel:  sentry.LevelInfo,
+	logrus.WarnLevel:  sentry.LevelWarning,
+	logrus.ErrorLevel: sentry.LevelError,
+	logrus.FatalLevel: sentry.LevelFatal,
+	logrus.PanicLevel: sentry.LevelFatal,
+}
 
 type Converter func(entry *logrus.Entry, event *sentry.Event, hub *sentry.Hub)
 
@@ -82,9 +80,13 @@ func (hook Hook) Fire(entry *logrus.Entry) error {
 		event.Tags[k] = v
 	}
 
-	hook.converter(entry, event, hook.hub)
+	hub := sentry.GetHubFromContext(entry.Context)
+	if hub == nil {
+		hub = hook.hub
+	}
 
-	hook.hub.CaptureEvent(event)
+	hook.converter(entry, event, hub)
+	hub.CaptureEvent(event)
 
 	return nil
 }
