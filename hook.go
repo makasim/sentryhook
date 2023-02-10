@@ -80,9 +80,12 @@ func (hook Hook) Fire(entry *logrus.Entry) error {
 		event.Tags[k] = v
 	}
 
-	hub := sentry.GetHubFromContext(entry.Context)
-	if hub == nil {
-		hub = hook.hub
+	hub := hook.hub
+	if entry.Context != nil {
+		h := sentry.GetHubFromContext(entry.Context)
+		if h != nil {
+			hub = h
+		}
 	}
 
 	hook.converter(entry, event, hub)
