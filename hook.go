@@ -103,8 +103,16 @@ func DefaultConverter(entry *logrus.Entry, event *sentry.Event, hub *sentry.Hub)
 	}
 
 	if err, ok := entry.Data[logrus.ErrorKey].(error); ok {
+		exceptionType := reflect.TypeOf(err).String()
+		// if a message is provided and the error itself is a simple string error,
+		// let's show the message as the issue's title instead
+		if exceptionType == "*errors.errorString" && entry.Message != "" {
+			exceptionType = entry.Message
+			event.Message = "" // no need to duplicate information
+		}
+
 		exception := sentry.Exception{
-			Type:  reflect.TypeOf(err).String(),
+			Type:  exceptionType,
 			Value: err.Error(),
 		}
 
