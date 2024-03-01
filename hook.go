@@ -89,7 +89,15 @@ func (hook Hook) Fire(entry *logrus.Entry) error {
 	}
 
 	hook.converter(entry, event, hub)
-	hub.CaptureEvent(event)
+
+	// hub.CaptureEvent does not support passing sentry.EventHint.
+	// See: https://docs.sentry.io/platforms/go/performance/instrumentation/opentelemetry/#linking-errors-to-transactions.
+	client, scope := hub.Client(), hub.Scope()
+	client.CaptureEvent(
+		event,
+		&sentry.EventHint{Context: entry.Context},
+		scope,
+	)
 
 	return nil
 }
